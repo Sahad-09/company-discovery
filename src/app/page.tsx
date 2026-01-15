@@ -6,7 +6,7 @@ import { TrendingUp, BarChart3, Zap, Search } from "lucide-react";
 import { SearchInput } from "@/components/ui/search-input";
 import { ResultsGridSkeleton } from "@/components/ui/skeleton";
 import { CompanyCardList } from "@/components/company-card";
-import { SearchResult } from "@/lib/qdrant";
+import { EnhancedSearchResult } from "@/lib/qdrant";
 
 type SearchState = "idle" | "loading" | "results" | "error" | "empty";
 
@@ -28,7 +28,7 @@ const EXAMPLE_QUERIES = [
 
 export default function Home() {
   const [state, setState] = useState<SearchState>("idle");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<EnhancedSearchResult[]>([]);
   const [error, setError] = useState<SearchError | null>(null);
   const [lastQuery, setLastQuery] = useState("");
 

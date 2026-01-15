@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEmbedding } from "@/lib/openai";
-import { searchCompanies, SearchResult } from "@/lib/qdrant";
+import { hybridSearch, EnhancedSearchResult } from "@/lib/qdrant";
 
 export interface RecommendRequest {
   query: string;
 }
 
 export interface RecommendResponse {
-  results: SearchResult[];
+  results: EnhancedSearchResult[];
   query: string;
 }
 
@@ -50,10 +50,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step B & C: Search Qdrant and return top 10 results
-    let results: SearchResult[];
+    // Step B & C: Hybrid search across companies and news, return top 10 results
+    let results: EnhancedSearchResult[];
     try {
-      results = await searchCompanies(embedding, 10);
+      results = await hybridSearch(embedding, 10);
     } catch (error) {
       console.error("Search error:", error);
       return NextResponse.json<ErrorResponse>(

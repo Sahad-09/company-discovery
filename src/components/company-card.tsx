@@ -1,34 +1,73 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { SignalStrength } from "./ui/signal-strength";
-import { SearchResult } from "@/lib/qdrant";
+import { EnhancedSearchResult } from "@/lib/qdrant";
+
+// Component for expandable text with proper formatting
+function ExpandableText({ text, maxLength = 200 }: { text: string; maxLength?: number }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const shouldTruncate = text.length > maxLength;
+
+  const displayText = isExpanded ? text : text.slice(0, maxLength);
+  const isTruncated = !isExpanded && shouldTruncate;
+
+  // Function to format text with basic markdown-like parsing
+  const formatText = (content: string) => {
+    const lines = content.split('\n');
+    const formattedLines = lines.map((line) => {
+      // Handle bold text (**text**)
+      line = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-text-primary">$1</strong>');
+
+      // Handle bullet points (- text)
+      if (line.trim().startsWith('- ')) {
+        return `<li class="ml-4 text-sm text-text-muted leading-relaxed">${line.trim().substring(2)}</li>`;
+      }
+
+      // Handle regular paragraphs
+      if (line.trim()) {
+        return `<p class="text-sm text-text-muted leading-relaxed mb-2">${line}</p>`;
+      }
+
+      return '';
+    });
+
+    return formattedLines.join('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="text-sm text-text-muted leading-relaxed"
+        dangerouslySetInnerHTML={{
+          __html: formatText(displayText) + (isTruncated ? '<span class="text-text-muted/70">...</span>' : '')
+        }}
+      />
+      {shouldTruncate && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium"
+        >
+          {isExpanded ? 'Read less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface CompanyCardProps {
-  result: SearchResult;
+  result: EnhancedSearchResult;
   index: number;
   className?: string;
 }
 
-function getScoreClass(percentage: number): string {
-  if (percentage >= 80) return "score-high";
-  if (percentage >= 50) return "score-medium";
-  return "score-low";
-}
-
-function getScoreLabel(percentage: number): string {
-  if (percentage >= 80) return "Strong";
-  if (percentage >= 60) return "Moderate";
-  return "Weak";
-}
-
 export function CompanyCard({ result, index, className }: CompanyCardProps) {
-  const { payload, score } = result;
+  const { payload, combinedScore, newsCount, relevantNews } = result;
   const { name, nse, company } = payload;
-  const percentage = Math.round(score * 100);
-  const scoreClass = getScoreClass(percentage);
-  const scoreLabel = getScoreLabel(percentage);
+  const hasNewsBoost = newsCount > 0;
+  const [showNewsPopup, setShowNewsPopup] = useState(false);
 
   return (
     <motion.article
@@ -48,11 +87,11 @@ export function CompanyCard({ result, index, className }: CompanyCardProps) {
       )}
     >
       {/* Signal Strength Bar - Far Left */}
-      <SignalStrength score={score} className="shrink-0" />
+      <SignalStrength score={combinedScore} className="shrink-0" />
 
       {/* Main Content */}
       <div className="flex-1 min-w-0 space-y-2.5">
-        {/* Top Row: Ticker + Name + Score */}
+        {/* Top Row: Ticker + Name */}
         <div className="flex items-center gap-3">
           {/* Ticker Badge */}
           <span
@@ -71,26 +110,20 @@ export function CompanyCard({ result, index, className }: CompanyCardProps) {
             {name}
           </h3>
 
-          {/* Score Badge - Far Right */}
+          {/* News Indicator - Far Right (no score shown) */}
           <div className="ml-auto flex items-center gap-2 shrink-0">
-            <span
-              className={cn(
-                "hidden sm:inline-block text-[10px] font-medium uppercase tracking-wider",
-                scoreClass === "score-high" && "text-market-green",
-                scoreClass === "score-medium" && "text-amber-400",
-                scoreClass === "score-low" && "text-market-red"
-              )}
-            >
-              {scoreLabel}
-            </span>
-            <span
-              className={cn(
-                "inline-flex items-center px-2 py-0.5 rounded border font-mono text-xs font-medium",
-                scoreClass
-              )}
-            >
-              {percentage}%
-            </span>
+            {hasNewsBoost && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-medium cursor-pointer hover:bg-blue-500/30 transition-colors"
+                title={`${newsCount} relevant news article${newsCount > 1 ? 's' : ''} - Click to view`}
+                onClick={() => setShowNewsPopup(true)}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                </svg>
+                {newsCount}
+              </span>
+            )}
           </div>
         </div>
 
@@ -100,22 +133,98 @@ export function CompanyCard({ result, index, className }: CompanyCardProps) {
         </p>
       </div>
 
-      {/* Subtle left border accent based on score */}
-      <div
-        className={cn(
-          "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full opacity-0 group-hover:opacity-100",
-          "transition-opacity duration-200",
-          scoreClass === "score-high" && "bg-market-green",
-          scoreClass === "score-medium" && "bg-amber-400",
-          scoreClass === "score-low" && "bg-market-red"
-        )}
-      />
+      {/* Subtle left border accent removed since score is hidden */}
+
+      {/* News Popup Modal */}
+      {showNewsPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowNewsPopup(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="relative w-[70vw] max-w-none mx-4 overflow-hidden"
+          >
+            <div
+              className="bg-surface-primary border border-border-subtle rounded-xl shadow-xl h-[80vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border-subtle">
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary">
+                    Related News for {name} ({nse})
+                  </h2>
+                  <p className="text-sm text-text-muted mt-1">
+                    {newsCount} relevant article{newsCount > 1 ? 's' : ''} that influenced the matching score
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowNewsPopup(false)}
+                  className="p-2 rounded-lg hover:bg-surface-secondary transition-colors"
+                >
+                  <svg className="w-5 h-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 flex-1 overflow-y-auto">
+                <div className="space-y-4">
+                  {relevantNews?.map((news, idx) => (
+                    <motion.article
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="p-4 bg-surface-secondary/50 border border-border-subtle rounded-lg"
+                    >
+                      <div className="space-y-4">
+                        {/* Header with Symbol and Title */}
+                        <div className="flex items-start gap-3">
+                          {news.symbol && (
+                            <span className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 text-blue-400 font-mono text-xs font-semibold rounded shrink-0 mt-1">
+                              {news.symbol}
+                            </span>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-text-primary leading-tight text-sm">
+                              {news.specific_title}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Company */}
+                        <div className="text-xs">
+                          <span className="text-text-muted">Company: </span>
+                          <span className="font-medium text-text-primary">{news.company}</span>
+                        </div>
+
+                        {/* Long Summary with Read More */}
+                        <div>
+                          <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">
+                            Summary
+                          </h4>
+                          <ExpandableText text={news.long_summary} maxLength={300} />
+                        </div>
+                      </div>
+                    </motion.article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.article>
   );
 }
 
 interface CompanyCardListProps {
-  results: SearchResult[];
+  results: EnhancedSearchResult[];
 }
 
 export function CompanyCardList({ results }: CompanyCardListProps) {
